@@ -1,42 +1,50 @@
+import streamlit as st
 import cv2
 import numpy as np
+from PIL import Image
+import io
 
-def recolor_to_blue(image_path, output_path):
-    # 1. Load the image
-    img = cv2.imread(image_path)
-    if img is None:
-        print(f"Error: Could not load image from {image_path}")
-        return
+st.title("SharpHuman: Neon Blue Converter")
 
-    # 2. Convert to HSV color space
-    # HSV (Hue, Saturation, Value) separates color from brightness.
+# 1. File Uploader
+uploaded_file = st.file_uploader("Upload your Neon City Image", type=['jpg', 'png', 'jpeg'])
+
+if uploaded_file is not None:
+    # Convert the file to an OpenCV image
+    file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
+    img = cv2.imdecode(file_bytes, 1)
+
+    # 2. Process the Image (The Blue Shift)
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-
-    # 3. Define the target Blue Hue
-    # In OpenCV's HSV scale, Hue is 0-180. Blue is around 120.
-    blue_hue_value = 120
     
-    # 4. Create a mask for colored pixels
-    # We want to change pixels that have color (Saturation > 0) and brightness (Value > 0).
-    # This avoids changing the pure black background.
-    lower_threshold = np.array([0, 1, 1]) # Any hue, at least some saturation and brightness
-    upper_threshold = np.array([180, 255, 255])
-    mask = cv2.inRange(hsv, lower_threshold, upper_threshold)
+    # Target: Electric Blue (Hue ~120)
+    target_hue = 120
+    
+    # Mask: Select non-black pixels (brightness > 10)
+    lower_black = np.array([0, 10, 10])
+    upper_black = np.array([180, 255, 255])
+    mask = cv2.inRange(hsv, lower_black, upper_black)
 
-    # 5. Apply the new Hue only to the masked area
-    # We set the Hue (channel 0) to our blue value where the mask is active.
-    hsv[:, :, 0] = np.where(mask > 0, blue_hue_value, hsv[:, :, 0])
+    # Apply the shift
+    hsv[:, :, 0] = np.where(mask > 0, target_hue, hsv[:, :, 0])
+    
+    # Convert back to BGR then to RGB for Streamlit display
+    final_bgr = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+    final_rgb = cv2.cvtColor(final_bgr, cv2.COLOR_BGR2RGB)
 
-    # 6. Convert back to BGR (standard image format)
-    new_img = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+    # 3. Show Result
+    st.image(final_rgb, caption="Processed Blue Version", use_column_width=True)
 
-    # 7. Save the result
-    cv2.imwrite(output_path, new_img)
-    print(f"Success! Blue image saved to {output_path}")
+    # 4. Create Download Button
+    # Convert back to PIL to save to memory buffer
+    result_pil = Image.fromarray(final_rgb)
+    buf = io.BytesIO()
+    result_pil.save(buf, format="PNG")
+    byte_im = buf.getvalue()
 
-# --- Run the function ---
-# Make sure 'image_0.png' is the name of your downloaded image file.
-input_image = 'image_0.png'
-output_image = 'neon_city_blue.png'
-
-recolor_to_blue(input_image, output_image)
+    st.download_button(
+        label="Download Blue Image",
+        data=byte_im,
+        file_name="sharphuman_blue.png",
+        mime="image/png"
+    )
